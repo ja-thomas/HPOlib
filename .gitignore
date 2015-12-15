@@ -1,7 +1,7 @@
 *.py[cod]
 
 # Optimizers
-*_src*
+# *_src*
 
 # Runsolver
 runsolver/src/*
