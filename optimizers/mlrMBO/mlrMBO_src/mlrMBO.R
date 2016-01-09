@@ -6,7 +6,8 @@ library(devtools)
 library(stringr)
 library(checkmate)
 library(ParamHelpers)
-load_all("/home/bischl/cos/mlrMBO")
+library(mlrMBO)
+#load_all("/home/bischl/cos/mlrMBO")
 
 extractField = function(lines, pattern, convert = as.character) {
   hit = which(str_detect(lines, pattern))
