@@ -27,7 +27,8 @@ def check_dependencies():
   pass
 
 def build_mlrmbo_call(config, options, optimizer_dir, parent_space):
-    call = 'Rscript ' + os.path.join(config.get('mlrMBO', 'path_to_optimizer'), 'mlrMBO.R')
+    thispath = os.path.dirname(os.path.realpath(__file__))
+    call = 'Rscript ' + os.path.join(thispath, config.get('mlrMBO', 'path_to_optimizer'), 'mlrMBO.R')
     call = ' '.join([call, optimizer_dir, parent_space])
     # call = os.path.join(config.get('mlrMBO', 'path_to_optimizer'), 'mlrMBO.R')
     return call
