@@ -57,7 +57,6 @@ def check_dependencies():
 
 
 def build_spearmint_call(config, options, optimizer_dir):
-    print
     call = 'python ' + os.path.join(config.get('SPEARMINT', 'path_to_optimizer'), 'spearmint_sync.py')
     call = ' '.join([call, optimizer_dir,
                     '--config', os.path.join(optimizer_dir, os.path.basename(config.get('SPEARMINT', 'config'))),
@@ -88,6 +87,7 @@ def restore(config, optimizer_dir, **kwargs):
     sys.path.append(os.path.join(
         os.path.dirname(os.path.realpath(__file__)), path_to_optimizer))
     # We need the Grid because otherwise we cannot load the pickle file
+    sys.path.append(config.get('SPEARMINT', 'path_to_optimizer'))
     import ExperimentGrid
     # Assumes that all not valid states are marked as crashed
     fh = open(restore_file)
@@ -122,6 +122,13 @@ def main(config, options, experiment_dir, experiment_directory_prefix, **kwargs)
                                      experiment_directory_prefix
                                      + optimizer_str + "_" +
                                      str(options.seed) + "_" + time_string)
+
+    # Alter the python path
+    if not 'PYTHONPATH' in os.environ:
+        os.environ['PYTHONPATH'] = os.path.dirname(__file__)
+    else:
+        os.environ['PYTHONPATH'] = os.path.dirname(__file__) + os.pathsep + \
+                                   os.environ['PYTHONPATH']
 
     # Build call
     cmd = build_spearmint_call(config, options, optimizer_dir)

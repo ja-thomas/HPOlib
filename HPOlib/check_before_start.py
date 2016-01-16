@@ -60,22 +60,13 @@ def _check_modules():
     except:
         raise ImportError("Scipy cannot be imported. Are you sure that it's installed?")
 
-    try:
-        import theano
-        logger.debug("\tTheano: %s" % str(theano.__version__))
-    except ImportError:
-        logger.warning("Theano not found. You might need this to run some "
-                       "more complex benchmarks!")
-
-    if 'cuda' not in os.environ['PATH']:
-        logger.warning("CUDA not in $PATH")
-
 
 def _check_config(experiment_dir):
     # check whether config file exists
     config_file = os.path.join(experiment_dir, "config.cfg")
     if not os.path.exists(config_file):
-        logger.warn("There is no config.cfg in %s, all options need to be provided by CLI arguments" % experiment_dir)
+        logger.warn("There is no config.cfg in %s, all options need to be "
+                    "provided as CLI arguments" % experiment_dir)
 
 
 def check_optimizer(optimizer):
@@ -84,7 +75,8 @@ def check_optimizer(optimizer):
         # User told us, e.g. "tpe"
         # Optimizer is in our optimizer directory
         # Now check how many versions are present
-        parser = glob.glob(os.path.join(path, '*_parser.py'))
+        parser = glob.glob(path + '*_parser.py')
+        logger.info("parser %s", parser)
         if len(parser) > 1:
             logger.critical("Sorry I don't know which optimizer to use: %s",
                             parser)

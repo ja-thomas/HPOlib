@@ -20,8 +20,6 @@ import logging
 import os
 import sys
 
-import ConfigParser
-
 logger = logging.getLogger("HPOlib.optimizers.smac.smac_2_06_01-dev_parser")
 
 
@@ -34,16 +32,24 @@ def manipulate_config(config):
         else:
             # SMACs maxint
             config.set('SMAC', 'cutoff_time', "2147483647")
-    if not config.has_option('SMAC', 'algo_exec'):
-        config.set('SMAC', 'algo_exec',
-                   config.get('HPOLIB', 'run_instance'))
+
+    total_num_runs_limit = (config.getint('HPOLIB', 'number_of_jobs') *
+                            config.getint('HPOLIB', 'number_cv_folds'))
     if not config.has_option('SMAC', 'total_num_runs_limit'):
-        config.set('SMAC', 'total_num_runs_limit',
-                   str(config.getint('HPOLIB', 'number_of_jobs') *
-                       config.getint('HPOLIB', 'number_cv_folds')))
+        config.set('SMAC', 'total_num_runs_limit', str(total_num_runs_limit))
+    elif config.getint('SMAC', 'total_num_runs_limit') != total_num_runs_limit:
+        logger.warning("Found a total_num_runs_limit (%d) which differs from "
+                       "the one read from the config (%d). This can e.g. "
+                       "happen when restoring a SMAC run" %
+                       (config.getint('SMAC', 'total_num_runs_limit'),
+                       total_num_runs_limit))
+        config.set('SMAC', 'total_num_runs_limit', str(total_num_runs_limit))
+
     if not config.has_option('SMAC', 'num_concurrent_algo_execs'):
         config.set('SMAC', 'num_concurrent_algo_execs',
                    config.get('HPOLIB', 'number_of_concurrent_jobs'))
+
+    config.set('SMAC', 'exec_mode', 'SMAC')
 
     path_to_optimizer = config.get('SMAC', 'path_to_optimizer')
     if not os.path.isabs(path_to_optimizer):

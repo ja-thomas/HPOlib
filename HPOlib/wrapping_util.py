@@ -25,11 +25,15 @@ import math
 import numpy as np
 import traceback
 import os
+import psutil
+import re
+import signal
 from StringIO import StringIO
 import sys
 import types
 
 import config_parser.parse as parse
+
 
 __authors__ = ["Katharina Eggensperger", "Matthias Feurer"]
 __contact__ = "automl.org"
@@ -50,6 +54,18 @@ def nan_mean(arr):
     # Second: divide with number of finite elements
     res /= num_ele
     return res
+
+
+def nan_std(arr):
+    # First: Sum all finite elements
+    arr = np.array(arr)
+    vals = ([ele for ele in arr if np.isfinite(ele)])
+    if len(vals) == 0:
+        return np.nan
+    try:
+        return np.std(vals)
+    except:
+        return 0
 
 
 def get_time_string():
@@ -100,6 +116,10 @@ def format_traceback(exc_info):
     return "\n" + traceback.format_exc() + "\n\n" + traceback_template % traceback_details + "\n\n"
 
 
+def get_optimizer():
+    return "_".join(os.getcwd().split("/")[-1].split("_")[0:-2])
+
+
 def load_experiment_config_file():
     # Load the config file, this holds information about data, black box fn etc.
     try:
@@ -119,7 +139,8 @@ def load_experiment_config_file():
         sys.exit(1)
 
 
-def get_configuration(experiment_dir, optimizer_version, unknown_arguments):
+def get_configuration(experiment_dir, optimizer_version, unknown_arguments,
+                      strict=True):
     """How the configuration is parsed:
     1. The command line is already parsed, we have a list of unknown arguments
     2. Assemble list of all config files related to this experiment, these are
@@ -186,9 +207,11 @@ def get_configuration(experiment_dir, optimizer_version, unknown_arguments):
         fh.seek(0)
     else:
         fh = None
+
     config = parse.parse_config(config_files, allow_no_value=True,
                                 optimizer_version=optimizer_version,
                                 cli_values=fh)
+
     if fh is not None:
         fh.close()
     if optimizer_version != "" and optimizer_version is not None:
@@ -249,3 +272,160 @@ def save_config_to_file(file_handle, config, write_nones=True):
             if (config.get(section, key) is None and write_nones) or \
                 config.get(section, key) is not None:
                     file_handle.write("%s = %s\n" % (key, config.get(section, key)))
+
+
+def kill_processes(sig, processes):
+    """Kill a number of processes with a specified signal.
+
+    Parameters
+    ----------
+    sig : int
+        Send this signal to the processes
+
+    processes : list of psutil.Process
+    """
+    # TODO: somehow wait, until the Experiment pickle is written to disk
+
+
+    pids_with_commands = []
+    for process in processes:
+        try:
+            pids_with_commands.append((process.pid, process.cmdline()))
+        except:
+            pass
+
+    logger.debug("Running: %s" % "\n".join(pids_with_commands))
+    for process in processes:
+        try:
+            os.kill(process.pid, sig)
+        except Exception as e:
+            logger.error(type(e))
+            logger.error(e)
+
+
+class Exit:
+    def __init__(self):
+        self.exit_flag = False
+        self.signal = None
+
+    def true(self):
+        self.exit_flag = True
+
+    def false(self):
+        self.exit_flag = False
+
+    def set_exit_flag(self, exit):
+        self.exit_flag = exit
+
+    def get_exit(self):
+        return self.exit_flag
+
+    def signal_callback(self, signal_, frame):
+        SIGNALS_TO_NAMES_DICT = dict((getattr(signal, n), n) \
+                                     for n in dir(signal) if
+                                     n.startswith('SIG') and '_' not in n)
+
+        logger.critical("Received signal %s" % SIGNALS_TO_NAMES_DICT[signal_])
+        self.true()
+        self.signal = signal_
+
+
+def remove_param_metadata(params):
+    """
+    Check whether some params are defined on the Log scale or with a Q value,
+    must be marked with "LOG$_{paramname}" or Q[0-999]_$paramname
+    LOG_/Q_ will be removed from the paramname
+    """
+    for para in params:
+        new_name = para
+
+        if isinstance(params[para], str):
+            params[para] = params[para].strip("'")
+            params[para] = params[para].strip('"')
+        if "LOG10_" in para:
+            pos = para.find("LOG10_")
+            new_name = para[0:pos] + para[pos + 6:]
+            params[new_name] = np.power(10, float(params[para]))
+            del params[para]
+        elif "LOG2_" in para:
+            pos = para.find("LOG2_")
+            new_name = para[0:pos] + para[pos + 5:]
+            params[new_name] = np.power(2, float(params[para]))
+            del params[para]
+        elif "LOG_" in para:
+            pos = para.find("LOG_")
+            new_name = para[0:pos] + para[pos + 4:]
+            params[new_name] = np.exp(float(params[para]))
+            del params[para]
+            # Check for Q value, returns round(x/q)*q
+        m = re.search(r'Q[0-999\.]{1,10}_', para)
+        if m is not None:
+            pos = new_name.find(m.group(0))
+            tmp = new_name[0:pos] + new_name[pos + len(m.group(0)):]
+            q = float(m.group(0)[1:-1])
+            params[tmp] = round(float(params[new_name]) / q) * q
+            del params[new_name]
+
+
+def flatten_parameter_dict(params):
+    """
+    TODO: Generalize this, every optimizer should do this by itself
+    """
+    # Flat nested dicts and shorten lists
+    # FORCES SMAC TO FOLLOW SOME CONVENTIONS, e.g.
+    # lr_penalty': hp.choice('lr_penalty', [{
+    # 'lr_penalty' : 'zero'}, {  | Former this line was 'type' : 'zero'
+    # 'lr_penalty' : 'notZero',
+    #    'l2_penalty_nz': hp.lognormal('l2_penalty_nz', np.log(1.0e-6), 3.)}])
+    # Lists cannot be forwarded via the command line, therefore the list has to
+    # be unpacked. ONLY THE FIRST VALUE IS FORWARDED!
+
+    # This class enables us to distinguish tuples, which are parameters from
+    # tuples which contain different things...
+    class Parameter:
+        def __init__(self, pparam):
+            self.pparam = pparam
+
+    params_to_check = list()
+    params_to_check.append(params)
+
+    new_dict = dict()
+    while len(params_to_check) != 0:
+        param = params_to_check.pop()
+
+        if type(param) in (list, tuple, np.ndarray):
+
+            for sub_param in param:
+                params_to_check.append(sub_param)
+
+        elif isinstance(param, dict):
+            params_to_check.extend([Parameter(tmp_param) for tmp_param in
+                                    zip(param.keys(), param.values())])
+
+        elif isinstance(param, Parameter):
+            key = param.pparam[0]
+            value = param.pparam[1]
+            if type(value) == dict:
+                params_to_check.append(value)
+            elif type(value) in (list, tuple, np.ndarray) and \
+                    all([type(v) not in (list, tuple, np.ndarray) for v in
+                         value]):
+                # Spearmint special case, keep only the first element
+                # Adding: variable_id = val
+                if len(value) == 1:
+                    new_dict[key] = value[0]
+                else:
+                    for v_idx, v in enumerate(value):
+                        new_dict[key + "_%s" % v_idx] = v
+                        #new_dict[key] = value[0]
+            elif type(value) in (list, tuple, np.ndarray):
+                for v in value:
+                    params_to_check.append(v)
+            else:
+                new_dict[key] = value
+
+        else:
+            raise Exception(
+                "Invalid params, cannot be flattened: \n%s." % params)
+    params = new_dict
+    return params
