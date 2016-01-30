@@ -42,11 +42,12 @@ setwd(path.optdir)
 # construct objective function in R
 objfun = function(x) {
   params = paste("-", names(x), " \\'", as.character(x), "\\'", sep = "")
-  s = system2("python", c("../../../HPOlib/cv.py", params), stdout = TRUE, stderr = TRUE)
-  pattern = " Result:"
+  s = system2("python", c("-m", "HPOlib.optimization_interceptor", "--params", params), stdout = TRUE, stderr = TRUE)
+  pattern = "Result:"
   j = which(str_detect(s, pattern))
   assertInt(j, lower = 1L, na.ok = FALSE)
-  as.numeric(str_trim(str_split(s[j], pattern)[[1L]][2L]))
+  respart = str_split_fixed(s[j], ",", 2)[[1L]]
+  as.numeric(str_split_fixed(respart, " ", 2)[[2L]])
 }
 
 
