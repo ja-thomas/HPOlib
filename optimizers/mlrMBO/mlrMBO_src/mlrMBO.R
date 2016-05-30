@@ -38,32 +38,38 @@ setwd(path.optdir)
 # messagef("Param set    : %s", path.parset)
 # messagef("Run Config   : %s", path.config)
 
-
-# construct objective function in R
-objfun = function(x) {
-  params = paste("-", names(x), " \\'", as.character(x), "\\'", sep = "")
-  s = system2("python", c("-m", "HPOlib.optimization_interceptor", "--params", params), stdout = TRUE, stderr = TRUE)
-  pattern = "Result:"
-  j = which(str_detect(s, pattern))
-  assertInt(j, lower = 1L, na.ok = FALSE)
-  respart = str_split_fixed(s[j], ",", 2)[[1L]]
-  as.numeric(str_split_fixed(respart, " ", 2)[[2L]])
-}
-
-
 # read parset.R
 source(path.parset)
+
+# construct objective function in R
+objfun = makeSingleObjectiveFunction(
+  name = "HPOlib",
+  fn = function(x) {
+	  params = removeMissingValues(x)
+	  params = paste("-", names(params), " \\'", as.character(params), "\\'", sep = "")
+	  s = system2("python", c("../../../HPOlib/cv.py", params), stdout = TRUE, stderr = TRUE)
+	  pattern = " Result:"
+	  j = which(str_detect(s, pattern))
+	  assertInt(j, lower = 1L, na.ok = FALSE)
+	  as.numeric(str_trim(str_split(s[j], pattern)[[1L]][2L]))
+  },
+  par.set = par.set,
+  global.opt.value = -Inf
+)
 
 dimx = getParamNr(par.set, devectorize = TRUE)
 
 # lets do this heuristic now, for autoweka this will not scale
 init.design.points = dimx * 4L
 iters = number.of.jobs - init.design.points
-ctrl = makeMBOControl(init.design.points = init.design.points, iters = iters, y.name = "..y..")
+design = generateDesign(init.design.points, par.set)
+ctrl = makeMBOControl(y.name = "..y..")
+ctrl = setMBOControlTermination(iters = iters, control = ctrl)
 ctrl = setMBOControlInfill(ctrl, crit = "ei", opt = "focussearch",
   opt.focussearch.points = 1000, opt.focussearch.maxit = 3L, opt.restarts = 3L)
 
 learner = makeLearner("regr.km", predict.type = "se", nugget.estim = TRUE)
+learner = makeImputeWrapper(learner = learner, classes = list(numeric = imputeMean(), integer = imputeMean(), logical = imputeMode(), factor = imputeConstant("NA"), character = imputeConstant("NA")))
 
-mbo(objfun, learner = learner, par.set = par.set, control = ctrl)
+mbo(objfun, design = design, learner = learner, control = ctrl)
 
