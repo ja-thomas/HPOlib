@@ -239,9 +239,9 @@ class AdditionalInstall(install):
         if irace_1_07:
             # Install IRACE
             cur_dir = os.getcwd()
-            os.chdir(os.path.join(optimizer_dir, 'irace'))
+            os.chdir(optimizer_dir)
 
-            call = "R CMD INSTALL irace_1.07.tar.gz -l `pwd`"
+            call = "R CMD INSTALL irace_1.07.tar.gz"
             try:
                 subprocess.check_call(call, shell=True)
             except subprocess.CalledProcessError, e:
