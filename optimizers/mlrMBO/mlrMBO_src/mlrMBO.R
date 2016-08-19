@@ -69,7 +69,6 @@ ctrl = setMBOControlInfill(ctrl, crit = "ei", opt = "focussearch",
   opt.focussearch.points = 1000, opt.focussearch.maxit = 3L, opt.restarts = 3L)
 
 learner = makeLearner("regr.km", predict.type = "se", nugget.estim = TRUE)
-learner = makeImputeWrapper(learner = learner, classes = list(numeric = imputeMean(), integer = imputeMean(), logical = imputeMode(), factor = imputeConstant("NA"), character = imputeConstant("NA")))
 
 mbo(objfun, design = design, learner = learner, control = ctrl)
 
