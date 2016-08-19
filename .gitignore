@@ -4,7 +4,6 @@ docs/build/*
 *.py[cod]
 
 # Optimizers
-*_src*
 optimizers/irace/irace/
 
 # Runsolver

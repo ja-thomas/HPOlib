@@ -45,8 +45,8 @@ source(path.parset)
 objfun = makeSingleObjectiveFunction(
   name = "HPOlib",
   fn = function(x) {
-	  params = removeMissingValues(x)
-	  params = paste("-", names(params), " \\'", as.character(params), "\\'", sep = "")
+      params = removeMissingValues(x)
+      params = paste("-", names(params), " \\'", as.character(params), "\\'", sep = "")
       s = system2("python", c("-m", "HPOlib.optimization_interceptor", "--params", params), stdout = TRUE, stderr = TRUE)
       pattern = "Result:"
       j = which(str_detect(s, pattern))
@@ -68,7 +68,7 @@ ctrl = setMBOControlTermination(iters = iters, control = ctrl)
 ctrl = setMBOControlInfill(ctrl, crit = "ei", opt = "focussearch",
   opt.focussearch.points = 1000, opt.focussearch.maxit = 3L, opt.restarts = 3L)
 
-learner = makeLearner("regr.km", predict.type = "se", nugget.estim = TRUE)
+learner = makeLearner("regr.randomForest", predict.type = "se")
 
 mbo(objfun, design = design, learner = learner, control = ctrl)
 
