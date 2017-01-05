@@ -60,15 +60,29 @@ objfun = makeSingleObjectiveFunction(
 dimx = getParamNr(par.set, devectorize = TRUE)
 
 # lets do this heuristic now, for autoweka this will not scale
-init.design.points = dimx * 4L
+init.design.points = dimx * 4L - 1
 iters = number.of.jobs - init.design.points
-design = generateDesign(init.design.points, par.set)
+design = rbind(generateDesign(init.design.points, par.set), generateDefaultDesign(par.set))
 ctrl = makeMBOControl(y.name = "..y..")
 ctrl = setMBOControlTermination(iters = iters, control = ctrl)
-ctrl = setMBOControlInfill(ctrl, crit = "ei", opt = "focussearch",
-  opt.focussearch.points = 1000, opt.focussearch.maxit = 3L, opt.restarts = 3L)
+ctrl = setMBOControlInfill(ctrl, crit = "cb", crit.cb.lambda = 1L, 
+  opt = "focussearch",
+  opt.focussearch.points = 1000, 
+  opt.focussearch.maxit = 5L, 
+  opt.restarts = 3L,
+  filter.proposed.points = FALSE)
 
 learner = makeLearner("regr.randomForest", predict.type = "se")
+
+# dirty hack: use values that are out of range to impute
+cols = lapply(par.set$pars, function(p) {
+  if (p$type %in% c("numeric", "integer"))
+    imputeConstant(ifelse(p$upper < 0, ceiling(p$upper/2), ifelse(p$upper == 0, 1, p$upper*2)))
+  else if (p$type %in% c("discrete"))
+    imputeConstant("__miss__")
+})
+names(cols) = getParamIds(par.set)
+learner = makeImputeWrapper(learner, cols = cols)
 
 mbo(objfun, design = design, learner = learner, control = ctrl)
 

@@ -60,15 +60,22 @@ objfun = makeSingleObjectiveFunction(
 dimx = getParamNr(par.set, devectorize = TRUE)
 
 # lets do this heuristic now, for autoweka this will not scale
-init.design.points = dimx * 4L
+init.design.points = dimx * 4L - 1
 iters = number.of.jobs - init.design.points
-design = generateDesign(init.design.points, par.set)
+design = rbind(generateDesign(init.design.points, par.set), generateDefaultDesign(par.set))
 ctrl = makeMBOControl(y.name = "..y..")
 ctrl = setMBOControlTermination(iters = iters, control = ctrl)
-ctrl = setMBOControlInfill(ctrl, crit = "ei", opt = "focussearch",
-  opt.focussearch.points = 1000, opt.focussearch.maxit = 3L, opt.restarts = 3L)
+ctrl = setMBOControlInfill(ctrl, crit = "cb", crit.cb.lambda = 1L, 
+  opt = "focussearch",
+  opt.focussearch.points = 1000, 
+  opt.focussearch.maxit = 5L, 
+  opt.restarts = 3L,
+  filter.proposed.points = FALSE)
 
-learner = makeLearner("regr.km", predict.type = "se", nugget.estim = TRUE)
+learner = makeLearner("regr.km", predict.type = "se", 
+  nugget.estim = TRUE, 
+  covtype = "matern3_2",
+  optim.method = "gen")
 
 mbo(objfun, design = design, learner = learner, control = ctrl)
 
